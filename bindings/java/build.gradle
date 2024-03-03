@@ -1,0 +1,92 @@
+import java.nio.file.Files
+
+plugins {
+    id 'java'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(22)
+    }
+
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.jetbrains:annotations:24.0.0'
+}
+
+// The directory that contains the CMake project for the natives
+var nativesDir = rootProject.projectDir.toPath()
+    .getParent()
+    .getParent()
+    .toRealPath()
+
+// The directory we will use to build the natives
+var nativesBuildDir = rootProject.projectDir.toPath()
+    .resolve('nativeBuild')
+    .toFile()
+
+// The name of the native library
+var nativeName = System.mapLibraryName('PeLoader')
+
+// The path to the native build script
+var nativeBuildScript = nativesDir
+    .resolve('CMakeLists.txt')
+    .toFile()
+
+// The path to the built native
+var nativeLibrary = nativesBuildDir.toPath()
+        .resolve(nativeName)
+        .toFile()
+
+tasks.register('buildNativesPrepare', Exec) {
+    workingDir(nativesBuildDir)
+
+    commandLine('cmake', nativesDir.toString())
+
+    inputs.files(nativeBuildScript)
+        .withPropertyName('sourceFiles')
+
+    outputs.files(fileTree(nativesBuildDir))
+        .withPropertyName('outputDir')
+
+    doFirst {
+        Files.createDirectories(nativesBuildDir.toPath())
+    }
+}
+
+tasks.register('buildNatives', Exec) {
+    dependsOn 'buildNativesPrepare'
+
+    workingDir(nativesBuildDir)
+
+    commandLine('cmake', '--build', '.')
+
+    inputs.files(
+        fileTree(nativesDir.resolve('public').toFile()),
+        fileTree(nativesDir.resolve('include').toFile()),
+        fileTree(nativesDir.resolve('source').toFile())
+    ).withPropertyName('sourceFiles')
+
+    outputs.files(
+        nativeLibrary
+    )
+}
+
+tasks.withType(JavaCompile).configureEach {
+    dependsOn 'buildNatives'
+}
+
+jar {
+    from(nativeLibrary) {
+        rename {
+            'natives/linux/amd64/libPeLoader.so'
+        }
+    }
+}
