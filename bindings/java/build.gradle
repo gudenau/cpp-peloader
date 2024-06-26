@@ -2,6 +2,7 @@ import java.nio.file.Files
 
 plugins {
     id 'java'
+    id 'maven-publish'
 }
 
 java {
@@ -89,4 +90,23 @@ jar {
             'natives/linux/amd64/libPeLoader.so'
         }
     }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'net.gudenau.peloader'
+            artifactId = 'PeLoader'
+            version = '1.0.0'
+
+            from components.java
+        }
+    }
+
+    /*
+    repositories {
+        maven {
+        }
+    }
+    */
 }
