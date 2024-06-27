@@ -2,6 +2,12 @@
 #define PELOADER_PELOADER_H
 
 #ifdef __cplusplus
+#include <cstdint>
+#else
+#include <stdint.h>
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -38,6 +44,89 @@ typedef struct {
  * @return 0 on success, <0 on error
  */
 int peloader_open(const char* path, PeFile** result);
+
+/**
+ * The current version of the options structure.
+ */
+#define PELOADER_OPTIONS_VERSION (1)
+
+/**
+ * The different ways to open a PE file.
+ */
+typedef enum {
+    /**
+     * Open a PE file on disk, must provide a non-null path.
+     */
+    PELOADER_OPEN_FILE = 0,
+
+    /**
+     * Open a PE file from memory, must provide a buffer and a length.
+     */
+    PELOADER_OPEN_MEMORY = 1,
+} PeLoaderOpenMode;
+
+/**
+ * A callback that is invoked when a PE file loaded from memory is closed, used to free the provided memory buffer.
+ */
+typedef void (*PeFileFreeCallback)(const void* buffer, void* user);
+
+/**
+ * The options for peloader_openEx
+ */
+typedef struct {
+    /**
+     * The version of the structure.
+     */
+    int version;
+
+    /**
+     * The method to open the PE file.
+     */
+    PeLoaderOpenMode mode;
+
+    /**
+     * The options that change based on the open mode.
+     */
+    union {
+        /**
+         * Path mode only: the path to the file to open.
+         */
+        const char* path;
+        /**
+         * Memory mode only
+         */
+        struct {
+            /**
+             * The pointer to the PE file in memory.
+             */
+            const void* buffer;
+
+            /**
+             * The length of the PE buffer.
+             */
+            size_t length;
+
+            /**
+             * The optional callback to free the buffer when it is no longer needed.
+             */
+            PeFileFreeCallback callback;
+
+            /**
+             * The user data to pass to the callback.
+             */
+            void* user;
+        };
+    } file;
+} PeLoaderOpen;
+
+/**
+ * Opens a PE file with the given options. The documentation for the structure explains the options.
+ *
+ * @param options The options of the PE file to open
+ * @param result The opened PE file
+ * @return 0 on success, <0 on error
+ */
+int peloader_openEx(const PeLoaderOpen* options, PeFile** result);
 
 /**
  * Closes an opened PE file and sets the pointer to NULL.

@@ -50,7 +50,7 @@ static inline size_t max(size_t a, size_t b) {
  * @param file The file to cleanup
  */
 static void cleanup(PeFile* file) {
-    if(file->fileHandle != -1) close(file->fileHandle);
+    closeFile(&file->file);
 
     if(file->importCount != 0) {
         for(int i = 0; i < file->importCount; i++) {
@@ -83,7 +83,7 @@ static void cleanup(PeFile* file) {
  * @return 0 on success, <0 on error
  */
 template <typename T> static int readOptionalHeader(PeFile* file, T& buffer, uint16_t* remaining) {
-    auto transferred = readPartially(file->fileHandle, &buffer, min(*remaining, sizeof(buffer)));
+    auto transferred = readPartially(&file->file, &buffer, min(*remaining, sizeof(buffer)));
     if(transferred < 0) return (int) transferred;
     *remaining -= transferred;
     return 0;
@@ -186,7 +186,7 @@ static int parsePeHeaders(PeFile* file, PeHeader& peHeader) {
     // The sections are right after the PE header, no pointers or anything
     auto sections = new PeSection[peHeader.numberOfSections];
     for(int i = 0; i < peHeader.numberOfSections; i++) {
-        auto result = readFully(file->fileHandle, sections[i].header);
+        auto result = readFully(&file->file, sections[i].header);
         if(result < 0) {
             delete[] sections;
             return result;
@@ -254,7 +254,7 @@ static int readSegments(PeFile* file) {
         // There are sections that only exist in memory (like BSS)
         if(section->header.pointerToRawData != 0) {
             auto result = readFully(
-                file->fileHandle,
+                &file->file,
                 section->header.pointerToRawData,
                 sectionPointer,
                 min(section->header.sizeOfRawData, section->size)
@@ -492,20 +492,20 @@ static int applySegmentPerms(PeFile* file) {
 static int parsePeFile(PeFile* file) {
     {
         DosHeader dosHeader;
-        auto result = readFully(file->fileHandle, dosHeader);
+        auto result = readFully(&file->file, dosHeader);
         if(result < 0) return result;
 
         if(dosHeader.magic != DOS_MAGIC) {
             return -EINVAL;
         }
 
-        if(lseek(file->fileHandle, dosHeader.peOff, SEEK_SET) == (off_t) -1) {
+        if(fileSeek(&file->file, dosHeader.peOff) == (off_t) -1) {
             return -errno;
         }
     }
 
     PeHeader peHeader;
-    auto result = readFully(file->fileHandle, peHeader);
+    auto result = readFully(&file->file, peHeader);
     if(result < 0) return result;
 
     if(peHeader.magic != PE_MAGIC || peHeader.sizeOfOptionalHeader < 2) {
@@ -513,7 +513,7 @@ static int parsePeFile(PeFile* file) {
     }
 
     uint16_t magic;
-    result = readFully(file->fileHandle, magic);
+    result = readFully(&file->file, magic);
     if(result < 0) return result;
 
     //TODO This should support other arches (with ifdefs)
@@ -539,8 +539,7 @@ static int parsePeFile(PeFile* file) {
     result = applySegmentPerms(file);
     if(result < 0) return result;
 
-    close(file->fileHandle);
-    file->fileHandle = -1;
+    closeFile(&file->file);
 
     return result;
 }
@@ -550,12 +549,55 @@ int peloader_open(const char* path, PeFile** result) {
         return -EINVAL;
     }
 
+    PeLoaderOpen options;
+    options.version = PELOADER_OPTIONS_VERSION;
+    options.mode = PELOADER_OPEN_FILE;
+    options.file.path = path;
+    return peloader_openEx(&options, result);
+}
+
+int peloader_openEx(const PeLoaderOpen* options, PeFile** result) {
+    if(!options || !result) {
+        return -EINVAL;
+    }
+
+    PeLoaderOpen optionsCopy;
+    memcpy(&optionsCopy, options, sizeof(*options));
+    if(optionsCopy.version != PELOADER_OPTIONS_VERSION) {
+        return -EINVAL;
+    }
+
     auto file = new PeFile;
 
-    file->fileHandle = open(path, O_NOFOLLOW);
-    if(file->fileHandle == -1) {
-        cleanup(file);
-        return -errno;
+    switch(optionsCopy.mode) {
+        case PELOADER_OPEN_FILE: {
+            if(optionsCopy.file.path == nullptr) {
+                cleanup(file);
+                return EINVAL;
+            }
+
+            if(openFile(&file->file, optionsCopy.file.path) != 0) {
+                cleanup(file);
+                return -errno;
+            }
+        } break;
+
+        case PELOADER_OPEN_MEMORY: {
+            if(optionsCopy.file.buffer == nullptr || optionsCopy.file.length == 0) {
+                cleanup(file);
+                return EINVAL;
+            }
+
+            if(openMemory(&file->file, optionsCopy.file.buffer, optionsCopy.file.length, optionsCopy.file.callback, optionsCopy.file.user) != 0) {
+                cleanup(file);
+                return -errno;
+            }
+        } break;
+
+        default: {
+            cleanup(file);
+            return -EINVAL;
+        } break;
     }
 
     auto res = parsePeFile(file);

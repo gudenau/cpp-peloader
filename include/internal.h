@@ -1,6 +1,7 @@
 #ifndef PELOADER_INTERNAL_H
 #define PELOADER_INTERNAL_H
 
+#include "io.h"
 #include "pefile.h"
 
 typedef struct {
@@ -23,7 +24,7 @@ typedef struct {
 
 struct PeFile {
     //TODO Make the fileHandle and other stuff temporary, they are not needed once the PE file is loaded.
-    int fileHandle;
+    File file;
 
     struct {
         PeOptionalHeaderStd std;
