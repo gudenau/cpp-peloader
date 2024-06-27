@@ -179,7 +179,7 @@ int peloader_imports(PeFile* file, const char* module, PeSymbol* symbols);
  * @param symbols An array of symbols or NULL
  * @return the count of exported symbols, <0 on error
  */
-int peloader_exports(PeFile* file, PeSymbol* symbolss);
+int peloader_exports(PeFile* file, PeSymbol* symbols);
 
 #ifdef __cplusplus
 }

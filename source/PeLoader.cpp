@@ -773,16 +773,16 @@ int peloader_imports(PeFile* file, const char* module, PeSymbol* symbols) {
     return count;
 }
 
-int peloader_exports(PeFile* file, PeSymbol* symbolss) {
+int peloader_exports(PeFile* file, PeSymbol* symbols) {
     if(file == nullptr) {
         return -EINVAL;
     }
 
     auto count = file->exportCount;
-    if(symbolss != nullptr) {
+    if(symbols != nullptr) {
         for(int i = 0; i < count; i++) {
             auto currentIn = &file->exports[i];
-            auto currentOut = &symbolss[i];
+            auto currentOut = &symbols[i];
             currentOut->name = currentIn->name;
             currentOut->ordinal = currentIn->ordinal;
             currentOut->address = currentIn->address;
